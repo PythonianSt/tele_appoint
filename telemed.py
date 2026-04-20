@@ -163,7 +163,11 @@ if st.session_state.triage == "YELLOW":
     df, sha = get_csv_from_github()
 
     slots = generate_slots()
-    booked_slots = df["slot"].dropna().tolist()
+
+    if "slot" in df.columns:
+        booked_slots = df["slot"].dropna().tolist()
+    else:
+        booked_slots = []
 
     available_slots = [s for s in slots if s not in booked_slots]
 
@@ -184,9 +188,25 @@ if st.session_state.triage == "YELLOW":
 
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-        push_csv_to_github(df, sha)
+        headers = {"Authorization": f"token {GITHUB_TOKEN}"}
 
-        st.success(f"นัดสำเร็จ: {selected_slot}")
+        csv_string = df.to_csv(index=False)
+        encoded = base64.b64encode(csv_string.encode()).decode()
+
+        data = {
+            "message": "update appointments",
+            "content": encoded
+        }
+
+        if sha:
+            data["sha"] = sha
+
+        response = requests.put(API_URL, headers=headers, data=json.dumps(data))
+
+        if response.status_code in [200, 201]:
+            st.success(f"นัดสำเร็จ: {selected_slot}")
+        else:
+            st.error(f"GitHub error: {response.text}")
 
 # ========================
 # ADMIN VIEW
