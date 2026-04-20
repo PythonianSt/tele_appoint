@@ -136,7 +136,8 @@ def ai_triage(symptoms, age):
 
     return response.choices[0].message.content
 
-triage = None
+if "triage" not in st.session_state:
+    st.session_state.triage = None
 
 if st.button("🔍 ประเมิน"):
     result = ai_triage(symptoms, age)
