@@ -145,18 +145,20 @@ if st.button("🔍 ประเมิน"):
 
     if "RED" in result:
         st.error("🚨 โปรดติดต่อสถานพยาบาลใกล้บ้าน หรือโทร 1669 ด่วน")
-        st.stop()
+        st.session_state.triage = "RED"
+
     elif "GREEN" in result:
         st.success("ดูแลตนเองได้")
-        st.stop()
+        st.session_state.triage = "GREEN"
+
     else:
         st.warning("สามารถนัด Telemedicine ได้")
-        triage = "YELLOW"
+        st.session_state.triage = "YELLOW"
 
 # ========================
 # BOOKING
 # ========================
-if triage == "YELLOW":
+if st.session_state.triage == "YELLOW":
 
     df, sha = get_csv_from_github()
 
