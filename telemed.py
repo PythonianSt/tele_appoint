@@ -172,7 +172,7 @@ if st.session_state.triage == "YELLOW":
     if st.button("✅ ยืนยันนัด"):
         new_row = {
             "citizen_id": citizen_id,
-            "dob": str(dob),
+            "dob": dob.strftime("%d/%m/%Y") if dob else None,
             "age": age,
             "gender": gender,
             "province": province,
