@@ -1,0 +1,182 @@
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+from openai import OpenAI
+import requests
+import base64
+import json
+
+# ========================
+# CONFIG
+# ========================
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+REPO = st.secrets["GITHUB_REPO"]
+CSV_PATH = st.secrets["CSV_PATH"]
+
+API_URL = f"https://api.github.com/repos/{REPO}/contents/{CSV_PATH}"
+
+# ========================
+# PAGE
+# ========================
+st.set_page_config(page_title="Telemedicine", layout="wide")
+st.title("🏥 ระบบนัดหมายแพทย์ทางไกล")
+
+# ========================
+# FUNCTIONS
+# ========================
+def calculate_age(dob):
+    today = datetime.today()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+def generate_slots():
+    slots = []
+    start_date = datetime.today()
+    for i in range(30):
+        day = start_date + timedelta(days=i)
+        for hour in range(9, 17):
+            slots.append(f"{day.strftime('%Y-%m-%d')} {hour}:00")
+    return slots
+
+# ===== GitHub CSV =====
+def get_csv_from_github():
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    r = requests.get(API_URL, headers=headers)
+
+    if r.status_code == 200:
+        content = base64.b64decode(r.json()["content"]).decode("utf-8")
+        df = pd.read_csv(pd.io.common.StringIO(content))
+        sha = r.json()["sha"]
+        return df, sha
+    else:
+        # file not exist → create new
+        df = pd.DataFrame(columns=[
+            "citizen_id","dob","age","gender","province",
+            "postal_code","symptoms","slot","created_at"
+        ])
+        return df, None
+
+def push_csv_to_github(df, sha=None):
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+
+    csv_string = df.to_csv(index=False)
+    encoded = base64.b64encode(csv_string.encode()).decode()
+
+    data = {
+        "message": "update appointments",
+        "content": encoded
+    }
+
+    if sha:
+        data["sha"] = sha
+
+    requests.put(API_URL, headers=headers, data=json.dumps(data))
+
+# ========================
+# INPUT
+# ========================
+st.header("📋 ข้อมูลนักศึกษา")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    citizen_id = st.text_input("เลขบัตรประชาชน")
+    dob = st.date_input("วันเกิด")
+    gender = st.selectbox("เพศ", ["ชาย","หญิง","อื่นๆ"])
+
+with col2:
+    province = st.text_input("จังหวัด")
+    postal_code = st.text_input("รหัสไปรษณีย์")
+
+age = calculate_age(dob) if dob else None
+if age:
+    st.success(f"อายุ: {age} ปี")
+
+# ========================
+# SYMPTOMS
+# ========================
+st.header("🩺 อาการ")
+symptoms = st.text_area("อธิบายอาการ")
+
+# ========================
+# AI TRIAGE
+# ========================
+def ai_triage(symptoms, age):
+    prompt = f"""
+    คุณเป็นแพทย์คัดกรอง
+
+    อายุ: {age}
+    อาการ: {symptoms}
+
+    ตอบ JSON:
+    {{
+        "level": "RED/YELLOW/GREEN",
+        "advice": "คำแนะนำ"
+    }}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-5.3",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2
+    )
+
+    return response.choices[0].message.content
+
+triage = None
+
+if st.button("🔍 ประเมิน"):
+    result = ai_triage(symptoms, age)
+    st.code(result)
+
+    if "RED" in result:
+        st.error("🚨 โปรดติดต่อสถานพยาบาลใกล้บ้าน หรือโทร 1669 ด่วน")
+        st.stop()
+    elif "GREEN" in result:
+        st.success("ดูแลตนเองได้")
+        st.stop()
+    else:
+        st.warning("สามารถนัด Telemedicine ได้")
+        triage = "YELLOW"
+
+# ========================
+# BOOKING
+# ========================
+if triage == "YELLOW":
+
+    df, sha = get_csv_from_github()
+
+    slots = generate_slots()
+    booked_slots = df["slot"].dropna().tolist()
+
+    available_slots = [s for s in slots if s not in booked_slots]
+
+    selected_slot = st.selectbox("เลือกเวลา", available_slots)
+
+    if st.button("✅ ยืนยันนัด"):
+        new_row = {
+            "citizen_id": citizen_id,
+            "dob": str(dob),
+            "age": age,
+            "gender": gender,
+            "province": province,
+            "postal_code": postal_code,
+            "symptoms": symptoms,
+            "slot": selected_slot,
+            "created_at": datetime.utcnow()
+        }
+
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
+        push_csv_to_github(df, sha)
+
+        st.success(f"นัดสำเร็จ: {selected_slot}")
+
+# ========================
+# ADMIN VIEW
+# ========================
+st.header("📊 นัดทั้งหมด")
+
+df, _ = get_csv_from_github()
+st.dataframe(df)
