@@ -5,6 +5,7 @@ from openai import OpenAI
 import requests
 import base64
 import json
+from datetime import date
 
 # ========================
 # CONFIG
@@ -82,7 +83,18 @@ col1, col2 = st.columns(2)
 
 with col1:
     citizen_id = st.text_input("เลขบัตรประชาชน")
-    dob = st.date_input("วันเกิด")
+    
+
+    # จำกัดช่วงวันเกิด
+    min_dob = date(1980, 1, 1)
+    max_dob = date(2015, 12, 31)
+
+    dob = st.date_input(
+        "วันเดือนปีเกิด (dd/mm/yyyy)",
+        min_value=min_dob,
+        max_value=max_dob,
+        format="DD/MM/YYYY"  # 👈 display format
+    )
     gender = st.selectbox("เพศ", ["ชาย","หญิง","อื่นๆ"])
 
 with col2:
