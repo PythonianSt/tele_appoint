@@ -22,7 +22,7 @@ API_URL = f"https://api.github.com/repos/{REPO}/contents/{CSV_PATH}"
 # PAGE
 # ========================
 st.set_page_config(page_title="Telemedicine", layout="wide")
-st.title("🏥 ระบบนัดหมายแพทย์ทางไกล")
+st.title("🏥 ระบบนัดหมายแพทย์ทางไกล สถานพยาบาล KU KPS")
 
 # ========================
 # FUNCTIONS
